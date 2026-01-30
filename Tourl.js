@@ -1,6 +1,13 @@
 import axios from "axios";
 import FormData from "form-data";
 
+/* =======================
+   CONFIG GITHUB (WAJIB)
+   ======================= */
+const GITHUB_TOKEN = "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";
+const GITHUB_USER  = "AndroTamvan";
+const GITHUB_REPO  = "GATAU"; // nama repo lu
+
 export default {
   command: "tourl",
   description: "Multi host uploader (fast, real, no fake)",
@@ -11,6 +18,7 @@ export default {
     if (!reply) return ctx.reply("❌ Reply media dengan /tourl");
 
     let fileId, isImage = false;
+
     if (reply.photo) {
       fileId = reply.photo.at(-1).file_id;
       isImage = true;
@@ -18,6 +26,15 @@ export default {
     else if (reply.audio) fileId = reply.audio.file_id;
     else if (reply.document) fileId = reply.document.file_id;
     else return ctx.reply("❌ Media tidak didukung");
+
+    // ===== AUTO EXTENSION =====
+    let ext = "bin";
+    if (reply.photo) ext = "jpg";
+    else if (reply.video) ext = "mp4";
+    else if (reply.audio) ext = "mp3";
+    else if (reply.document) {
+      ext = reply.document.file_name?.split(".").pop() || "bin";
+    }
 
     const info = await ctx.reply("📦 Upload ke multi-host...");
 
@@ -27,36 +44,57 @@ export default {
 
       const results = [];
 
-      // ===== PARALLEL TASKS =====
       await Promise.allSettled([
 
-        // CATBOX
+        /* ================= CATBOX ================= */
         (async () => {
           try {
             const form = new FormData();
             form.append("reqtype", "fileupload");
-            form.append("fileToUpload", buffer.data, "file");
-            const r = await axios.post("https://catbox.moe/user/api.php", form, { headers: form.getHeaders() });
-            results.push({ host: "Catbox", ok: true, url: r.data.trim(), exp: "Tanpa Expired" });
-          } catch { results.push({ host: "Catbox", ok: false }); }
+            form.append("fileToUpload", buffer.data, `file.${ext}`);
+            const r = await axios.post(
+              "https://catbox.moe/user/api.php",
+              form,
+              { headers: form.getHeaders() }
+            );
+            results.push({
+              host: "Catbox",
+              ok: true,
+              url: r.data.trim(),
+              exp: "Tanpa Expired"
+            });
+          } catch {
+            results.push({ host: "Catbox", ok: false });
+          }
         })(),
 
-        // POMF2
+        /* ================= POMF2 ================= */
         (async () => {
           try {
             const form = new FormData();
-            form.append("files[]", buffer.data, "file");
-            const r = await axios.post("https://pomf2.lain.la/upload.php", form, { headers: form.getHeaders() });
-            results.push({ host: "Pomf2", ok: true, url: r.data.files[0].url, exp: "Tanpa Expired" });
-          } catch { results.push({ host: "Pomf2", ok: false }); }
+            form.append("files[]", buffer.data, `file.${ext}`);
+            const r = await axios.post(
+              "https://pomf2.lain.la/upload.php",
+              form,
+              { headers: form.getHeaders() }
+            );
+            results.push({
+              host: "Pomf2",
+              ok: true,
+              url: r.data.files[0].url,
+              exp: "Tanpa Expired"
+            });
+          } catch {
+            results.push({ host: "Pomf2", ok: false });
+          }
         })(),
 
-        // GOFILE
+        /* ================= GOFILE ================= */
         (async () => {
           try {
             const server = await axios.get("https://api.gofile.io/getServer");
             const form = new FormData();
-            form.append("file", buffer.data, "file");
+            form.append("file", buffer.data, `file.${ext}`);
             const r = await axios.post(
               `https://${server.data.data.server}.gofile.io/uploadFile`,
               form,
@@ -68,27 +106,36 @@ export default {
               url: r.data.data.downloadPage,
               exp: "Expired jika tidak diakses 10 hari"
             });
-          } catch { results.push({ host: "GoFile.io", ok: false }); }
+          } catch {
+            results.push({ host: "GoFile.io", ok: false });
+          }
         })(),
 
-        // PIXHOST (IMAGE ONLY)
+        /* ================= PIXHOST (IMAGE ONLY) ================= */
         isImage ? (async () => {
           try {
             const form = new FormData();
-            form.append("img", buffer.data, "image.jpg");
-            const r = await axios.post("https://api.pixhost.to/images", form, { headers: form.getHeaders() });
-            results.push({ host: "Pixhost", ok: true, url: r.data.show_url, exp: "Tanpa Expired" });
-          } catch { results.push({ host: "Pixhost", ok: false }); }
+            form.append("img", buffer.data, `image.${ext}`);
+            const r = await axios.post(
+              "https://api.pixhost.to/images",
+              form,
+              { headers: form.getHeaders() }
+            );
+            results.push({
+              host: "Pixhost",
+              ok: true,
+              url: r.data.show_url,
+              exp: "Tanpa Expired"
+            });
+          } catch {
+            results.push({ host: "Pixhost", ok: false });
+          }
         })() : Promise.resolve(),
 
-        // GITHUB
+        /* ================= GITHUB ================= */
         (async () => {
           try {
-            const GITHUB_TOKEN = "ISI_TOKEN_GITHUB_LU_DI_SINI";
-            const GITHUB_USER = "USERNAME_GITHUB";
-            const GITHUB_REPO = "NAMA_REPO";
-
-            const filename = `upload_${Date.now()}.bin`;
+            const filename = `upload_${Date.now()}.${ext}`;
             const content = Buffer.from(buffer.data).toString("base64");
 
             await axios.put(
@@ -100,7 +147,8 @@ export default {
               {
                 headers: {
                   Authorization: `Bearer ${GITHUB_TOKEN}`,
-                  Accept: "application/vnd.github+json"
+                  Accept: "application/vnd.github+json",
+                  "User-Agent": "Telegram-Bot"
                 }
               }
             );
@@ -111,12 +159,14 @@ export default {
               url: `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/uploads/${filename}`,
               exp: "Tanpa Expired"
             });
-          } catch { results.push({ host: "GitHub", ok: false }); }
+          } catch {
+            results.push({ host: "GitHub", ok: false });
+          }
         })()
 
       ]);
 
-      // ===== OUTPUT =====
+      /* ================= OUTPUT ================= */
       const text =
         "📦 *MULTI HOST UPLOAD*\n\n" +
         results.map(r =>
@@ -141,9 +191,9 @@ export default {
         }
       );
 
-    } catch (e) {
-      console.error(e);
-      ctx.telegram.editMessageText(
+    } catch (err) {
+      console.error(err);
+      await ctx.telegram.editMessageText(
         ctx.chat.id,
         info.message_id,
         null,
