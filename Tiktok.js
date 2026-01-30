@@ -1,74 +1,90 @@
 import axios from "axios";
 
 export default {
-  command: ["tt", "tiktok"],
-  description: "TikTok Downloader HD (No WM, Real Data)",
+  command: ["tiktok", "tt"],
+  description: "TikTok Downloader PRO (HD + Slide)",
   ownerOnly: false,
 
   async execute(ctx) {
-    const text = ctx.message.text.split(" ").slice(1).join(" ");
-    if (!text) return ctx.reply("❌ Kirim link TikTok\n\nContoh:\n/tt https://vt.tiktok.com/xxxx");
+    const url = ctx.message.text.split(" ")[1];
+    if (!url || !url.includes("tiktok")) {
+      return ctx.reply("❌ Masukin link TikTok\n\nContoh:\n/tiktok https://vt.tiktok.com/xxxx");
+    }
 
-    const info = await ctx.reply("🔍 Mengambil data TikTok...");
+    const info = await ctx.reply("⬇️ Mengambil data TikTok...");
 
     try {
-      const api = `https://tikwm.com/api/?url=${encodeURIComponent(text)}&hd=1`;
-      const { data } = await axios.get(api, { timeout: 15000 });
+      // =============================
+      // ===== FETCH DATA ============
+      // =============================
+      const api = `https://tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`;
+      const { data } = await axios.get(api);
 
       if (!data || !data.data) {
-        return ctx.telegram.editMessageText(
+        throw "Invalid response";
+      }
+
+      const d = data.data;
+
+      // =============================
+      // ===== CAPTION ===============
+      // =============================
+      const caption =
+`🎵 *TIKTOK DOWNLOAD*
+
+👤 *User:* ${d.author.nickname} (@${d.author.unique_id})
+❤️ *Like:* ${d.digg_count}
+💬 *Comment:* ${d.comment_count}
+🔁 *Share:* ${d.share_count}
+💾 *Save:* ${d.collect_count || 0}
+👁️ *Views:* ${d.play_count}
+
+📝 *Caption:*
+${d.title || "-"}`;
+
+      // =============================
+      // ===== PHOTO SLIDE ===========
+      // =============================
+      if (d.images && d.images.length > 0) {
+        await ctx.telegram.editMessageText(
           ctx.chat.id,
           info.message_id,
           null,
-          "❌ Gagal ambil data TikTok"
-        );
-      }
-
-      const v = data.data;
-
-      const caption =
-        `🎵 *TIKTOK DOWNLOADER*\n\n` +
-        `👤 User: ${v.author.nickname} (@${v.author.unique_id})\n` +
-        `❤️ Like: ${v.digg_count}\n` +
-        `💬 Komentar: ${v.comment_count}\n` +
-        `🔁 Share: ${v.share_count}\n` +
-        `⭐ Save: ${v.collect_count}\n` +
-        `👁 Views: ${v.play_count}\n\n` +
-        `📝 Caption:\n${v.title || "-"}`;
-
-      // thumbnail
-      if (v.cover) {
-        await ctx.replyWithPhoto(v.cover, { caption: "🖼 Thumbnail" });
-      }
-
-      // video
-      await ctx.replyWithVideo(
-        { url: v.play },
-        {
           caption,
-          parse_mode: "Markdown"
+          { parse_mode: "Markdown" }
+        );
+
+        for (const img of d.images) {
+          await ctx.replyWithPhoto(img);
         }
+        return;
+      }
+
+      // =============================
+      // ===== VIDEO =================
+      // =============================
+      const videoURL = d.hdplay || d.play;
+
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        info.message_id,
+        null,
+        caption,
+        { parse_mode: "Markdown" }
       );
 
-      // audio
-      await ctx.replyWithAudio(
-        { url: v.music },
-        {
-          title: v.music_info?.title || "TikTok Audio",
-          performer: v.music_info?.author || v.author.nickname,
-          thumb: v.cover
-        }
-      );
+      await ctx.replyWithVideo(videoURL, {
+        caption: "🎬 TikTok HD",
+        supports_streaming: true
+      });
 
-      await ctx.telegram.deleteMessage(ctx.chat.id, info.message_id);
-
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
       ctx.telegram.editMessageText(
         ctx.chat.id,
         info.message_id,
         null,
-        "❌ Error TikTok API / Video private / Region lock"
+        "❌ Gagal download TikTok"
       );
     }
   }
